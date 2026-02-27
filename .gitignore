@@ -1,0 +1,82 @@
+# ========================= 
+# Python
+# =========================
+
+# Byte-compiled / optimized / DLL files
+**/__pycache__/
+**/*.py[cod]
+**/*$py.class
+
+# C extensions
+**/*.so
+
+# Distribution / packaging
+**/build/
+**/dist/
+**/*.egg-info/
+**/.eggs/
+**/pip-wheel-metadata/
+
+# Virtual environments
+**/venv/
+**/.venv/
+**/env/
+**/ENV/
+
+# Installer logs
+**/pip-log.txt
+**/pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+**/htmlcov/
+**/.tox/
+**/.nox/
+**/.coverage
+**/.coverage.*
+**/.cache
+**/pytest_cache/
+
+# Jupyter Notebook
+**/.ipynb_checkpoints/
+
+# IDEs
+**/.vscode/
+**/.idea/
+
+# OS files
+**/.DS_Store
+**/Thumbs.db
+
+
+# =========================
+# Flutter / Dart
+# =========================
+
+# Flutter build outputs
+**/flutter/
+**/build/
+**/.dart_tool/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/.packages
+**/.pub-cache/
+**/.pub/
+**/coverage/
+
+# Generated files
+**/*.lock
+# (Remove above line if you want to keep pubspec.lock versioned for apps)
+
+# iOS
+**/ios/Pods/
+**/ios/.symlinks/
+**/ios/Flutter/Flutter.framework
+**/ios/Flutter/Flutter.podspec
+
+# Android
+**/android/.gradle/
+**/android/app/build/
+**/android/local.properties
+
+# Misc
+**/*.log
