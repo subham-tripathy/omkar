@@ -3,7 +3,7 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 
 class ApiService {
-  static const String baseUrl = 'https://boot-massachusetts-prevention-libraries.trycloudflare.com/';
+  static const String baseUrl = 'https://statutory-really-glasses-reveal.trycloudflare.com';
 
   /// Send image bytes to backend for YOLO detection
   static Future<DetectionResult> detectObjects(Uint8List imageBytes) async {
