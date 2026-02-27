@@ -26,7 +26,7 @@ from ultralytics import YOLO
 model = YOLO("yolov8n.pt")  # Downloads automatically on first run
 
 # ─── Config ───────────────────────────────────────────────────────────────────
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "your_groq_api_key_here")
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "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")
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 # ─── Request/Response Models ──────────────────────────────────────────────────
@@ -114,7 +114,7 @@ async def explain_object(request: ExplanationRequest):
     }
     
     payload = {
-        "model": "llama3-8b-8192",
+        "model": "llama-3.1-8b-instant",
         "messages": [
             {"role": "system", "content": "You are a helpful educational assistant. Give clear, accurate, engaging explanations."},
             {"role": "user", "content": prompt}
@@ -126,7 +126,9 @@ async def explain_object(request: ExplanationRequest):
     async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.post(GROQ_API_URL, headers=headers, json=payload)
         if resp.status_code != 200:
-            raise HTTPException(status_code=502, detail="AI service error")
+            print("Groq error:", resp.status_code)
+            print("Groq response:", resp.text)
+            raise HTTPException(status_code=resp.status_code, detail=resp.text)
         
         data = resp.json()
         explanation = data["choices"][0]["message"]["content"].strip()
@@ -138,10 +140,14 @@ async def explain_object(request: ExplanationRequest):
     )
 
 
+@app.get("/")
+def home():
+    return "hello"
+
 @app.get("/health")
 async def health():
     return {"status": "ok", "model": "yolov8n"}
 
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=8000)
