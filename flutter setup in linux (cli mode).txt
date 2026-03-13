@@ -1,15 +1,12 @@
-wget https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_latest-stable.tar.xz
-tar xf flutter_linux_latest-stable.tar.xz
+git clone https://github.com/flutter/flutter.git -b stable
 export PATH="$PATH:`pwd`/flutter/bin"
 
 
 sudo apt update
-sudo apt install -y unzip openjdk-17-jdk wget
-
-java -version
-
+sudo apt install openjdk-17-jdk -y
 export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
 export PATH=$JAVA_HOME/bin:$PATH
+java -version
 
 mkdir -p $HOME/Android/cmdline-tools
 cd $HOME/Android/cmdline-tools
@@ -23,8 +20,8 @@ export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:
 
 source ~/.bashrc
 
-sdkmanager --licenses
-sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+y | sdkmanager --licenses
+sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
 
 flutter config --android-sdk $HOME/Android
 
