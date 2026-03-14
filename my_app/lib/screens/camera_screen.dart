@@ -1,11 +1,11 @@
-import 'dart:async';
 import 'dart:typed_data';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
-import '../services/api_service.dart';
-import '../widgets/bounding_box_painter.dart';
-import '../widgets/explanation_sheet.dart';
+import '../services/detection_service.dart';
+import '../services/log_service.dart';
+import '../models/detection_model.dart';
+import 'results_screen.dart';
+import 'log_screen.dart';
 
 class CameraScreen extends StatefulWidget {
   const CameraScreen({super.key});
@@ -17,11 +17,8 @@ class CameraScreen extends StatefulWidget {
 class _CameraScreenState extends State<CameraScreen>
     with WidgetsBindingObserver {
   CameraController? _controller;
-  List<CameraDescription> _cameras = [];
-  List<DetectedObject> _detectedObjects = [];
-  bool _isDetecting = false;
-  bool _isCameraReady = false;
-  Timer? _detectionTimer;
+  bool _isInitialized = false;
+  bool _isCapturing = false;
   String? _errorMessage;
 
   @override
@@ -33,330 +30,226 @@ class _CameraScreenState extends State<CameraScreen>
 
   Future<void> _initCamera() async {
     try {
-      _cameras = await availableCameras();
-      if (_cameras.isEmpty) {
-        setState(() => _errorMessage = 'No cameras found');
+      final cameras = await availableCameras();
+      if (cameras.isEmpty) {
+        setState(() => _errorMessage = 'No cameras found on this device.');
         return;
       }
-      await _startCamera(_cameras.first);
-    } catch (e) {
-      setState(() => _errorMessage = 'Camera error: $e');
-    }
-  }
-
-  Future<void> _startCamera(CameraDescription camera) async {
-    _controller = CameraController(
-      camera,
-      ResolutionPreset.medium,
-      enableAudio: false,
-      imageFormatGroup: ImageFormatGroup.jpeg,
-    );
-    try {
+      final back = cameras.firstWhere(
+        (c) => c.lensDirection == CameraLensDirection.back,
+        orElse: () => cameras.first,
+      );
+      _controller = CameraController(back, ResolutionPreset.high,
+          enableAudio: false, imageFormatGroup: ImageFormatGroup.jpeg);
       await _controller!.initialize();
-      if (mounted) {
-        setState(() => _isCameraReady = true);
-        _startDetectionLoop();
-      }
+      if (mounted) setState(() => _isInitialized = true);
     } catch (e) {
-      setState(() => _errorMessage = 'Failed to init camera: $e');
+      if (mounted) setState(() => _errorMessage = 'Camera error: $e');
     }
-  }
-
-  void _startDetectionLoop() {
-    // Run detection every 1.5 seconds to avoid hammering the backend
-    _detectionTimer = Timer.periodic(const Duration(milliseconds: 1500), (_) {
-      if (!_isDetecting && _controller!.value.isInitialized) {
-        _runDetection();
-      }
-    });
-  }
-
-  Future<void> _runDetection() async {
-    if (_isDetecting || _controller == null) return;
-    _isDetecting = true;
-
-    try {
-      final image = await _controller!.takePicture();
-      final bytes = await image.readAsBytes();
-      final result = await ApiService.detectObjects(bytes);
-      if (mounted) {
-        setState(() => _detectedObjects = result.objects);
-      }
-    } catch (e) {
-      // Silently ignore detection errors (network hiccup etc.)
-    } finally {
-      _isDetecting = false;
-    }
-  }
-
-  void _onTapDetection(TapDownDetails details, BoxConstraints constraints) {
-    final tapX = details.localPosition.dx / constraints.maxWidth;
-    final tapY = details.localPosition.dy / constraints.maxHeight;
-
-    for (final obj in _detectedObjects) {
-      if (obj.containsPoint(tapX, tapY)) {
-        _showExplanation(obj);
-        return;
-      }
-    }
-  }
-
-  void _showExplanation(DetectedObject obj) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => ExplanationSheet(detectedObject: obj),
-    );
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused) {
-      _detectionTimer?.cancel();
+    if (_controller == null || !_controller!.value.isInitialized) return;
+    if (state == AppLifecycleState.inactive) {
+      _controller!.dispose();
     } else if (state == AppLifecycleState.resumed) {
-      if (_isCameraReady) _startDetectionLoop();
+      _initCamera();
+    }
+  }
+
+  Future<void> _captureAndDetect() async {
+    if (_isCapturing || _controller == null || !_controller!.value.isInitialized) return;
+    setState(() => _isCapturing = true);
+    try {
+      final XFile file = await _controller!.takePicture();
+      final Uint8List imageBytes = await file.readAsBytes();
+      if (!mounted) return;
+
+      final DetectionResult result = await DetectionService.detect(imageBytes);
+      if (!mounted) return;
+
+      // ── Log every detected object name ──────────────────────────────────
+      if (result.objects.isNotEmpty) {
+        final names = result.objects
+            .map((o) => o.label[0].toUpperCase() + o.label.substring(1).replaceAll('_', ' '))
+            .toList();
+        await LogService.logDetections(names);
+      }
+
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ResultsScreen(
+            detectionResult: result,
+            capturedImageBytes: imageBytes,
+          ),
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Error: $e'),
+          backgroundColor: Colors.red[700],
+          behavior: SnackBarBehavior.floating,
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _isCapturing = false);
     }
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _detectionTimer?.cancel();
     _controller?.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_errorMessage != null) {
-      return _ErrorView(message: _errorMessage!);
-    }
-
-    if (!_isCameraReady) {
-      return const _LoadingView();
-    }
-
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
+        fit: StackFit.expand,
         children: [
-          // ── Camera Preview ──────────────────────────────────────────────────
-          Positioned.fill(child: CameraPreview(_controller!)),
+          // Camera preview / state views
+          if (_isInitialized && _controller != null)
+            GestureDetector(
+              onTap: _captureAndDetect,
+              child: CameraPreview(_controller!),
+            )
+          else if (_errorMessage != null)
+            _ErrorView(message: _errorMessage!, onRetry: () {
+              setState(() { _errorMessage = null; _isInitialized = false; });
+              _initCamera();
+            })
+          else
+            const _LoadingView(),
 
-          // ── Bounding Boxes + Tap detection ─────────────────────────────────
-          Positioned.fill(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                return GestureDetector(
-                  onTapDown: (d) => _onTapDetection(d, constraints),
-                  child: CustomPaint(
-                    painter: BoundingBoxPainter(
-                      objects: _detectedObjects,
-                      canvasSize: Size(constraints.maxWidth, constraints.maxHeight),
-                    ),
+          // Top bar
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                children: [
+                  _TopBtn(
+                    icon: Icons.arrow_back_ios_new_rounded,
+                    onTap: () => Navigator.pop(context),
                   ),
-                );
-              },
-            ),
-          ),
-
-          // ── Top Bar ─────────────────────────────────────────────────────────
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: _TopBar(
-              objectCount: _detectedObjects.length,
-              isDetecting: _isDetecting,
-              onBack: () => Navigator.pop(context),
-            ),
-          ),
-
-          // ── Hint banner ─────────────────────────────────────────────────────
-          if (_detectedObjects.isNotEmpty)
-            Positioned(
-              bottom: 40,
-              left: 24,
-              right: 24,
-              child: _HintBanner(count: _detectedObjects.length),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-// ─── Top Bar ──────────────────────────────────────────────────────────────────
-class _TopBar extends StatelessWidget {
-  final int objectCount;
-  final bool isDetecting;
-  final VoidCallback onBack;
-
-  const _TopBar(
-      {required this.objectCount,
-      required this.isDetecting,
-      required this.onBack});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: EdgeInsets.only(
-        top: MediaQuery.of(context).padding.top + 8,
-        bottom: 12,
-        left: 16,
-        right: 16,
-      ),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Colors.black.withOpacity(0.8), Colors.transparent],
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-        ),
-      ),
-      child: Row(
-        children: [
-          IconButton(
-            icon: const Icon(Icons.arrow_back_ios_new_rounded,
-                color: Colors.white),
-            onPressed: onBack,
-          ),
-          const Spacer(),
-          // Detection status pill
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: isDetecting
-                  ? const Color(0xFF6C63FF).withOpacity(0.8)
-                  : Colors.black.withOpacity(0.5),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.white.withOpacity(0.3)),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (isDetecting)
-                  SizedBox(
-                    width: 12,
-                    height: 12,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white.withOpacity(0.8),
-                    ),
-                  )
-                else
+                  const Spacer(),
+                  _TopBtn(
+                    icon: Icons.receipt_long_rounded,
+                    onTap: () => Navigator.push(context,
+                        MaterialPageRoute(builder: (_) => const LogScreen())),
+                  ),
+                  const SizedBox(width: 8),
                   Container(
-                    width: 8,
-                    height: 8,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFF3ECFCF),
-                      shape: BoxShape.circle,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(12),
                     ),
+                    child: const Row(children: [
+                      Icon(Icons.touch_app_rounded, color: Color(0xFF2D9CDB), size: 16),
+                      SizedBox(width: 6),
+                      Text('Tap to detect',
+                          style: TextStyle(color: Colors.white70, fontSize: 13)),
+                    ]),
                   ),
-                const SizedBox(width: 8),
-                Text(
-                  isDetecting ? 'Analyzing...' : '$objectCount object(s)',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
+                ],
+              ),
+            ),
+          ),
+
+          // Capturing overlay
+          if (_isCapturing)
+            Container(
+              color: Colors.black54,
+              child: const Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(color: Color(0xFF2D9CDB)),
+                    SizedBox(height: 16),
+                    Text('Detecting objects on-device…',
+                        style: TextStyle(color: Colors.white, fontSize: 16,
+                            fontWeight: FontWeight.w500)),
+                  ],
+                ),
+              ),
+            ),
+
+          // Bottom hint
+          if (_isInitialized && !_isCapturing)
+            Positioned(
+              bottom: 0, left: 0, right: 0,
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 24),
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.bottomCenter,
+                    end: Alignment.topCenter,
+                    colors: [Colors.black87, Colors.transparent],
                   ),
                 ),
-              ],
+                child: const Text(
+                  'Tap anywhere to capture and detect objects',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white70, fontSize: 13),
+                ),
+              ),
             ),
-          ),
         ],
       ),
     );
   }
 }
 
-// ─── Hint Banner ──────────────────────────────────────────────────────────────
-class _HintBanner extends StatelessWidget {
-  final int count;
-  const _HintBanner({required this.count});
-
+class _TopBtn extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  const _TopBtn({required this.icon, required this.onTap});
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.7),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF6C63FF).withOpacity(0.5)),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.touch_app_rounded,
-              color: Color(0xFF3ECFCF), size: 18),
-          const SizedBox(width: 8),
-          Text(
-            'Tap any highlighted object to learn about it',
-            style: TextStyle(
-              color: Colors.white.withOpacity(0.9),
-              fontSize: 13,
-            ),
-          ),
-        ],
-      ),
-    ).animate().fadeIn().slideY(begin: 0.3, end: 0);
-  }
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onTap,
+    child: Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(color: Colors.black54,
+          borderRadius: BorderRadius.circular(12)),
+      child: Icon(icon, color: Colors.white, size: 20),
+    ),
+  );
 }
 
-// ─── Loading View ─────────────────────────────────────────────────────────────
 class _LoadingView extends StatelessWidget {
   const _LoadingView();
-
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      color: const Color(0xFF1A1A2E),
-      child: const Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CircularProgressIndicator(color: Color(0xFF6C63FF)),
-            SizedBox(height: 20),
-            Text('Starting camera...',
-                style: TextStyle(color: Colors.white70)),
-          ],
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => const Center(
+    child: Column(mainAxisSize: MainAxisSize.min, children: [
+      CircularProgressIndicator(color: Color(0xFF2D9CDB)),
+      SizedBox(height: 16),
+      Text('Starting camera…', style: TextStyle(color: Colors.white70, fontSize: 14)),
+    ]),
+  );
 }
 
-// ─── Error View ───────────────────────────────────────────────────────────────
 class _ErrorView extends StatelessWidget {
   final String message;
-  const _ErrorView({required this.message});
-
+  final VoidCallback onRetry;
+  const _ErrorView({required this.message, required this.onRetry});
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF1A1A2E),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.error_outline,
-                  color: Colors.redAccent, size: 60),
-              const SizedBox(height: 16),
-              Text(message,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white70)),
-              const SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Go Back'),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Center(
+    child: Padding(
+      padding: const EdgeInsets.all(32),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        const Icon(Icons.camera_alt_outlined, color: Colors.white38, size: 64),
+        const SizedBox(height: 16),
+        Text(message, textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.white70, fontSize: 14)),
+        const SizedBox(height: 24),
+        ElevatedButton(onPressed: onRetry, child: const Text('Retry')),
+      ]),
+    ),
+  );
 }
