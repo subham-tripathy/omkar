@@ -172,7 +172,7 @@ class _CameraScreenState extends State<CameraScreen>
                   children: [
                     CircularProgressIndicator(color: Color(0xFF2D9CDB)),
                     SizedBox(height: 16),
-                    Text('Detecting objects on-device…',
+                    Text('Analysing with Groq AI…',
                         style: TextStyle(color: Colors.white, fontSize: 16,
                             fontWeight: FontWeight.w500)),
                   ],

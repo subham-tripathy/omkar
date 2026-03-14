@@ -19,15 +19,24 @@ class ResultsScreen extends StatelessWidget {
   List<MapEntry<String, double>> get _uniqueObjects {
     final best = <String, double>{};
     for (final obj in detectionResult.objects) {
-      final label = _fmt(obj.label);
-      if ((best[label] ?? 0) < obj.confidence) best[label] = obj.confidence;
+      // Normalise to lowercase key for dedup, display label stays as-is
+      final key = obj.label.toLowerCase().trim();
+      if ((best[key] ?? 0) < obj.confidence) best[key] = obj.confidence;
     }
-    return best.entries.toList()
+    // Re-map keys back to the original cased label from the first object
+    final keyToLabel = <String, String>{};
+    for (final obj in detectionResult.objects) {
+      final key = obj.label.toLowerCase().trim();
+      keyToLabel.putIfAbsent(key, () => _fmt(obj.label));
+    }
+    return best.entries
+        .map((e) => MapEntry(keyToLabel[e.key]!, e.value))
+        .toList()
       ..sort((a, b) => b.value.compareTo(a.value));
   }
 
   int _count(String fmtLabel) => detectionResult.objects
-      .where((o) => _fmt(o.label) == fmtLabel)
+      .where((o) => _fmt(o.label).toLowerCase() == fmtLabel.toLowerCase())
       .length;
 
   String _fmt(String s) =>
@@ -142,8 +151,8 @@ class ResultsScreen extends StatelessWidget {
                     label: '${items.length} unique',
                     color: const Color(0xFF27AE60)),
                 const SizedBox(width: 8),
-                const _Chip(icon: Icons.memory_rounded,
-                    label: 'YOLOv8n · On-device',
+                const _Chip(icon: Icons.auto_awesome_rounded,
+                    label: 'Groq Vision AI',
                     color: Color(0xFF9B59B6)),
               ]),
             ),

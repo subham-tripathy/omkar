@@ -52,7 +52,7 @@ class HomeScreen extends StatelessWidget {
               const SizedBox(height: 12),
 
               const Text(
-                'Point your camera at anything.\nTap to detect — tap an object to learn about it.',
+                'Point your camera at anything.\nTap to detect — AI identifies exact brands & models.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: Color(0xFF8B9CB6),
@@ -70,7 +70,7 @@ class HomeScreen extends StatelessWidget {
                 alignment: WrapAlignment.center,
                 children: const [
                   _FeatureChip(icon: Icons.camera_alt_outlined, label: 'Live Camera'),
-                  _FeatureChip(icon: Icons.search_rounded, label: 'YOLOv8 Detection'),
+                  _FeatureChip(icon: Icons.search_rounded, label: 'Groq Vision AI'),
                   _FeatureChip(icon: Icons.school_outlined, label: 'AI Explanations'),
                 ],
               ),

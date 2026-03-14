@@ -1,5 +1,5 @@
 name: my_app
-description: "Object Learner - YOLOv8n on-device detection + AI explanations."
+description: "Object Learner - Groq AI vision detection + AI explanations."
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -10,8 +10,6 @@ dependencies:
   flutter:
     sdk: flutter
   camera: ^0.11.0+2
-  tflite_flutter: ^0.12.1
-  image: ^4.2.0
   http: ^1.2.1
   shared_preferences: ^2.3.2
   cupertino_icons: ^1.0.8
@@ -23,5 +21,3 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-  assets:
-    - assets/models/yolov8n.tflite

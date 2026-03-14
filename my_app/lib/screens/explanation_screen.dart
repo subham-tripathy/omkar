@@ -105,7 +105,7 @@ class _ExplanationScreenState extends State<ExplanationScreen> {
                       style: const TextStyle(color: Colors.white, fontSize: 18,
                           fontWeight: FontWeight.w700)),
                   const SizedBox(height: 4),
-                  const Text('Detected on-device • ML Kit',
+                  const Text('Detected by Groq Vision AI',
                       style: TextStyle(color: Color(0xFF8B9CB6), fontSize: 12)),
                 ]),
               ]),
