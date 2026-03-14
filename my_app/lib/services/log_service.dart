@@ -1,59 +1,85 @@
-import 'dart:convert';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class DetectionLogEntry {
+  final String id;
   final String objectName;
   final DateTime timestamp;
+  final String uid;
+  final String username;
 
-  DetectionLogEntry({required this.objectName, required this.timestamp});
+  DetectionLogEntry({
+    required this.id,
+    required this.objectName,
+    required this.timestamp,
+    required this.uid,
+    required this.username,
+  });
 
-  Map<String, dynamic> toJson() => {
-        'objectName': objectName,
-        'timestamp': timestamp.toIso8601String(),
-      };
-
-  factory DetectionLogEntry.fromJson(Map<String, dynamic> json) =>
+  factory DetectionLogEntry.fromFirestore(
+      String id, Map<String, dynamic> data) =>
       DetectionLogEntry(
-        objectName: json['objectName'] as String,
-        timestamp: DateTime.parse(json['timestamp'] as String),
+        id: id,
+        objectName: data['objectName'] as String? ?? '',
+        timestamp: (data['timestamp'] as Timestamp?)?.toDate() ?? DateTime.now(),
+        uid: data['uid'] as String? ?? '',
+        username: data['username'] as String? ?? 'unknown',
       );
 }
 
 class LogService {
-  static const String _key = 'detection_logs';
+  static final _logs = FirebaseFirestore.instance.collection('logs');
 
-  /// Append multiple detected object names with the current timestamp.
-  static Future<void> logDetections(List<String> objectNames) async {
+  /// Save detected objects for the current user.
+  static Future<void> logDetections({
+    required List<String> objectNames,
+    required String uid,
+    required String username,
+  }) async {
     if (objectNames.isEmpty) return;
-    final prefs = await SharedPreferences.getInstance();
-    final existing = await getLogs();
-    final now = DateTime.now();
-    final newEntries = objectNames
-        .map((name) => DetectionLogEntry(objectName: name, timestamp: now))
-        .toList();
-    final all = [...existing, ...newEntries];
-    // Keep at most 500 entries to avoid unbounded growth
-    final trimmed = all.length > 500 ? all.sublist(all.length - 500) : all;
-    final encoded =
-        jsonEncode(trimmed.map((e) => e.toJson()).toList());
-    await prefs.setString(_key, encoded);
+    final batch = FirebaseFirestore.instance.batch();
+    final now = Timestamp.now();
+    for (final name in objectNames) {
+      final ref = _logs.doc();
+      batch.set(ref, {
+        'objectName': name,
+        'uid': uid,
+        'username': username,
+        'timestamp': now,
+      });
+    }
+    await batch.commit();
   }
 
-  /// Return all logs, newest first.
-  static Future<List<DetectionLogEntry>> getLogs() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_key);
-    if (raw == null || raw.isEmpty) return [];
-    final List<dynamic> decoded = jsonDecode(raw) as List<dynamic>;
-    final entries = decoded
-        .map((e) => DetectionLogEntry.fromJson(e as Map<String, dynamic>))
+  /// Logs for a specific user, newest first.
+  static Future<List<DetectionLogEntry>> getLogsForUser(String uid) async {
+    final snap = await _logs
+        .where('uid', isEqualTo: uid)
+        .orderBy('timestamp', descending: true)
+        .limit(200)
+        .get();
+    return snap.docs
+        .map((d) => DetectionLogEntry.fromFirestore(d.id, d.data()))
         .toList();
-    return entries.reversed.toList(); // newest first
   }
 
-  /// Clear all logs.
-  static Future<void> clearLogs() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_key);
+  /// All logs across all users (admin view), newest first.
+  static Future<List<DetectionLogEntry>> getAllLogs() async {
+    final snap = await _logs
+        .orderBy('timestamp', descending: true)
+        .limit(500)
+        .get();
+    return snap.docs
+        .map((d) => DetectionLogEntry.fromFirestore(d.id, d.data()))
+        .toList();
+  }
+
+  /// Delete all logs for a user.
+  static Future<void> clearLogsForUser(String uid) async {
+    final snap = await _logs.where('uid', isEqualTo: uid).get();
+    final batch = FirebaseFirestore.instance.batch();
+    for (final doc in snap.docs) {
+      batch.delete(doc.reference);
+    }
+    await batch.commit();
   }
 }

@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:typed_data';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
@@ -84,7 +85,7 @@ class ResultsScreen extends StatelessWidget {
               ),
               GestureDetector(
                 onTap: () => Navigator.push(context,
-                    MaterialPageRoute(builder: (_) => const LogScreen())),
+                    MaterialPageRoute(builder: (_) => LogScreen(uid: FirebaseAuth.instance.currentUser!.uid,))),
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                   decoration: BoxDecoration(

@@ -1,9 +1,0 @@
-{
-  "name": "Omkar Project Dev Environment",
-  "customizations": {
-    "vscode": {
-      "extensions": []
-    }
-  },
-  "postCreateCommand": "export PATH=$PATH:$(pwd)/flutter/bin && export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 && export PATH=$JAVA_HOME/bin:$PATH && export ANDROID_HOME=$HOME/Android && export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH && source ~/.bashrc && flutter config --android-sdk $HOME/Android"
-}

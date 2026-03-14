@@ -2,6 +2,7 @@ plugins {
     id("com.android.application")
     id("kotlin-android")
     id("dev.flutter.flutter-gradle-plugin")
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -20,7 +21,7 @@ android {
 
     defaultConfig {
         applicationId = "com.example.my_app"
-        minSdk = flutter.minSdkVersion                // ML Kit + tflite_flutter minimum
+        minSdk = flutter.minSdkVersion   // Firebase Auth requires minimum SDK 23
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
@@ -30,12 +31,6 @@ android {
         release {
             signingConfig = signingConfigs.getByName("debug")
         }
-    }
-
-    // Prevent Flutter/Gradle from compressing the .tflite file —
-    // tflite_flutter reads it as a raw byte stream from assets.
-    androidResources {
-        noCompress += listOf("tflite", "lite")
     }
 }
 

@@ -26,3 +26,15 @@ sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
 flutter config --android-sdk $HOME/Android
 
 flutter doctor
+
+
+
+-------------------------------------------------------------------------------------------------------------------------------
+
+export PATH=$PATH:$(pwd)/flutter/bin
+export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+export PATH=$JAVA_HOME/bin:$PATH
+export ANDROID_HOME=$HOME/Android
+export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH
+export PATH=$PATH:$HOME/.pub-cache/bin
+flutter config --android-sdk $HOME/Android
